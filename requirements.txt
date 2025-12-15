@@ -1,0 +1,46 @@
+# Core
+pandas
+numpy
+
+# Plotting
+matplotlib
+seaborn
+wordcloud
+
+# NLP
+nltk
+textblob
+afinn
+spacy
+sentence-transformers
+
+# ML / classifiers
+scikit-learn
+umap-learn
+hdbscan
+bertopic
+
+# Database
+psycopg2-binary
+
+# Web App
+streamlit
+pydeck
+python-dotenv
+
+# GeoJSON / mapping
+geopandas
+shapely
+fiona
+
+# Similarity
+scipy
+
+# Google Generative AI
+google-generativeai
+
+# Visualization
+matplotlib
+
+# Optional dependencies for notebooks (remove if deploying)
+ipywidgets
