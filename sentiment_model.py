@@ -30,8 +30,11 @@ from nltk.corpus import stopwords
 # 1. Configure NLTK data path
 # ----------------------------------------------------
 # This ensures Streamlit (or any deployed environment) can find NLTK resources.
-# If you deploy to a server or container, adjust this path accordingly.
-nltk.data.path.append("/Users/gomkrtchyan/Desktop/venv/nltk_data")
+# Add Streamlit Cloud's writable temp directory for NLTK data
+NLTK_DIR = os.path.join(os.getcwd(), "nltk_data")
+os.makedirs(NLTK_DIR, exist_ok=True)
+nltk.data.path.append(NLTK_DIR)
+
 
 
 # ----------------------------------------------------
@@ -40,9 +43,9 @@ nltk.data.path.append("/Users/gomkrtchyan/Desktop/venv/nltk_data")
 try:
     stop_words = set(stopwords.words("english"))
 except LookupError:
-    # If running for the first time, download stopwords
-    nltk.download("stopwords", download_dir="/Users/gomkrtchyan/Desktop/venv/nltk_data")
+    nltk.download("stopwords", download_dir=NLTK_DIR)
     stop_words = set(stopwords.words("english"))
+
 
 
 # ----------------------------------------------------
