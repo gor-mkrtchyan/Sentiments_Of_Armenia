@@ -2,36 +2,31 @@
 pandas
 numpy
 
-# Plotting
-matplotlib
-seaborn
-wordcloud
-
 # NLP
 nltk
-textblob
-afinn
 spacy
 sentence-transformers
 
-# ML / classifiers
+# Sentiment / ML
 scikit-learn
 umap-learn
 hdbscan
 bertopic
 
+# Visualization & Web App
+streamlit
+folium
+streamlit-folium
+wordcloud
+matplotlib
+seaborn
+pydeck
+
 # Database
 psycopg2-binary
 
-# Web App
-streamlit
-pydeck
+# Environment
 python-dotenv
-
-# GeoJSON / mapping
-geopandas
-shapely
-fiona
 
 # Similarity
 scipy
@@ -39,8 +34,5 @@ scipy
 # Google Generative AI
 google-generativeai
 
-# Visualization
-matplotlib
-
-# Optional dependencies for notebooks (remove if deploying)
+# Optional (Notebook Only)
 ipywidgets
