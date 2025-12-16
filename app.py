@@ -370,6 +370,43 @@ st.markdown("""
 st.title(f"Armenia — {explore_mode} Sentiment Map Explorer")
 st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# SUMMARY CARDS
+# ---------------------------------------------------------
+
+
+card_col1, card_col2, card_col3, card_col4 = st.columns([1,1,1,1])
+
+total_items = int(province_stats.get("restaurant_count", pd.Series([0])).sum())
+total_reviews = int(province_stats.get("review_count", pd.Series([0])).sum())
+weighted_sent = (
+    (province_stats.get("avg_sentiment", pd.Series([0])) * province_stats.get("review_count", pd.Series([1]))).sum()
+    / max(total_reviews, 1)
+)
+avg_rating = round(float(province_stats.get("avg_rating", pd.Series([0])).mean()), 2)
+
+with card_col1:
+    st.markdown(f"""
+        <div class="card"><h2>Total {explore_mode}</h2><p>{total_items}</p></div>
+    """, unsafe_allow_html=True)
+
+with card_col2:
+    st.markdown(f"""
+        <div class="card"><h2>Total Reviews</h2><p>{total_reviews}</p></div>
+    """, unsafe_allow_html=True)
+
+with card_col3:
+    st.markdown(f"""
+        <div class="card"><h2>Weighted Sentiment</h2><p>{round(weighted_sent,3)}</p></div>
+    """, unsafe_allow_html=True)
+
+with card_col4:
+    st.markdown(f"""
+        <div class="card"><h2>Average Rating</h2><p>{avg_rating}</p></div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
+
 
 # =========================================================
 # MAP UI — Folium Map Rendering
