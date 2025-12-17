@@ -689,7 +689,39 @@ with chat_container:
             # ML Recommendation Pipeline (Fast Offline Mode)
             # -------------------------------------------------
             def build_ml_response(query, top_n=5):
-                # Compute recommended locations
+
+                # Extract city/province from query BEFORE we run recommend_from_query
+                # Try match against known DB cities first
+                city_hit = extract_city_from_query(query, cities_list)
+
+                # If not found, fallback: extract ANY capitalized word from user query as possible city
+                if not city_hit:
+                    words = [w.strip(',.!?') for w in query.split()]
+                    # Heuristic: Armenian cities are typically capitalized proper nouns
+                    candidates = [w for w in words if w[0].isupper()]
+                    # Pick the first word that is not a common pronoun/article
+                    EXCLUDE = {"I", "You", "We", "They", "The", "A", "In", "At", "Of", "And", "Suggest", "Give", "Provide", "Tell", "Provide"}
+                    candidates = [c for c in candidates if c not in EXCLUDE]
+
+                    if candidates:
+                        city_hit = candidates[0]   # First possible city mentioned
+
+                prov_hit = extract_province_from_query(query, provinces_list)
+
+                # If the user asked for a city that exists in our city list,
+                # but our database has NO restaurants in that city → return graceful message.
+                if city_hit:
+                    db_city_subset = df[df["Town/City"].str.lower() == city_hit.lower()]
+                    if db_city_subset.empty:
+                        return f"Sorry, jan, we don't have any {explore_mode.lower()} in **{city_hit}** yet."
+
+                # Province-level same logic
+                if prov_hit:
+                    db_prov_subset = df[df["Province"].str.lower() == prov_hit.lower()]
+                    if db_prov_subset.empty:
+                        return f"Sorry, jan, we don't have any {explore_mode.lower()} in the **{prov_hit}** province yet."
+
+                # Compute recommended locations normally
                 recs = recommend_from_query(
                     query=query,
                     df=df,
@@ -703,11 +735,9 @@ with chat_container:
                     top_n=top_n
                 )
 
-                # Handle no match scenarios gracefully
+                # If ML engine returns NOTHING
                 if not recs:
-                    city_hit = extract_city_from_query(query, cities_list)
-                    prov_hit = extract_province_from_query(query, provinces_list)
-
+                    # Re-check intent
                     if city_hit:
                         return f"Barev jan — I couldn't find any {explore_mode.lower()} in **{city_hit}**."
                     if prov_hit:
