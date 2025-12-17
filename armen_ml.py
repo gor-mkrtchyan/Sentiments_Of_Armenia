@@ -219,6 +219,31 @@ def extract_city_from_query(query: str, cities: List[str]) -> Optional[str]:
             return city
     return None
 
+def safe_get(value):
+    """Return a clean string regardless of Series, list, scalar, numpy array, or NaN."""
+    import pandas as pd
+    import numpy as np
+
+    # If it's a pandas Series
+    if isinstance(value, pd.Series):
+        if value.empty:
+            return ""
+        value = value.iloc[0]
+
+    # If it's a list, tuple, or numpy array
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return str(value[0]).strip() if len(value) > 0 else ""
+
+    # None or NaN
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+
+    # Scalar string/number
+    return str(value).strip()
+
+
 
 def extract_province_from_query(query: str, provinces: List[str]) -> Optional[str]:
     if not query:
@@ -365,10 +390,10 @@ def recommend_from_query(
         row = row_df.iloc[0]
 
         # City
-        rest_city = str(row.get("Town/City", "")).strip()
-
+        rest_city = safe_get(row.get("Town/City"))
         # Province
-        rest_province = str(row.get("Province", "")).strip()
+        rest_province = safe_get(row.get("Province"))
+
 
         print("CITY:", repr(rest_city), type(rest_city))
         print("PROVINCE:", repr(rest_province), type(rest_province))
