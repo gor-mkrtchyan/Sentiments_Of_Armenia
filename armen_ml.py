@@ -457,27 +457,32 @@ def recommend_from_query(
     scores = []
 
     for name in embeddings.keys():
-
-        # Get minimal row for metadata checking
-        row = df[df["Location Name"] == name].head(1)
-        if row.empty:
+        # fetch row as DataFrame
+        row_df = df[df["Location Name"] == name].head(1)
+        if row_df.empty:
             continue
 
-        rest_city = str(row.get("Town/City", [""])[0])
-        rest_province = str(row.get("Province", [""])[0])
+        # convert to Series
+        row = row_df.iloc[0]
 
-        # City → highest priority
+        # City
+        rest_city = str(row.get("Town/City", "")).strip()
+
+        # Province
+        rest_province = str(row.get("Province", "")).strip()
+
+        print("CITY:", repr(rest_city), type(rest_city))
+        print("PROVINCE:", repr(rest_province), type(rest_province))
+
+        # city precedence
         if user_city:
             if rest_city.lower() != user_city.lower():
                 continue
-
-        # Province → secondary filter (only when city not provided)
         elif user_province:
             if rest_province.lower() != user_province.lower():
                 continue
 
-        # Score using the hybrid scoring system
-        final_score = hybrid_score(
+        score = hybrid_score(
             q_vec=q_vec,
             name=name,
             mode=mode,
@@ -487,12 +492,11 @@ def recommend_from_query(
             rating=rating,
             hotel_quality=hotel_quality,
             keywords=keywords,
-            price_pref=price_pref,
+            price_pref=price_pref
         )
 
-        scores.append((name, final_score))
+        scored.append((name, float(score)))
 
-    # Sort by score descending
-    scores = sorted(scores, key=lambda x: x[1], reverse=True)[:top_n]
 
-    return scores
+    scored_sorted = sorted(scored, key=lambda x: x[1], reverse=True)[:top_n]
+    return scored_sorted
