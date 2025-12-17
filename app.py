@@ -1,34 +1,7 @@
 # =========================================================
-# app.py  — MAIN APPLICATION
-# Interactive Sentiment Map + Dual ML/Gemini Chatbot
+# app.py  (Updated with Bigger Explore Toggle, Icons, Chat Bubbles, Reset Button)
 # =========================================================
 
-"""
-This Streamlit application powers the Armenia Restaurants & Hotels Explorer.
-
-Major Features:
----------------
-1. Interactive folium sentiment map (province-level)
-2. Explore toggle: 🍽 Restaurants ↔ 🏨 Hotels
-3. Recommendation Engine:
-       - ML Hybrid Recommender (offline, fast)
-       - Gemini Conversational Armen (LLM)
-4. WhatsApp-style chat UI + reset button
-5. Dynamic Top-5 rankings
-6. Dual datasets (restaurant + hotel)
-7. Separate chat histories per mode
-
-This file acts as the final integration layer between:
-    - database.py               (SQL data access)
-    - sentiment_model.py        (SVM sentiment)
-    - province_aggregation.py   (province stats)
-    - armen_ml.py               (recommender engine)
-    - armen_gemini.py           (LLM conversational layer)
-"""
-
-# =========================================================
-# Imports
-# =========================================================
 import os
 import json
 import pandas as pd
@@ -37,12 +10,12 @@ import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
 
-# ---- DATA / PROCESSING MODULES ----
+# ---- YOUR MODULES ----
 from database import fetch_reviews
 import sentiment_model
 from province_aggregation import compute_province_stats
 
-# ---- ML ENGINE (dual-mode) ----
+# ---- ARMEN ML ENGINE (dual-mode) ----
 from armen_ml import (
     model,
     build_embeddings,
@@ -56,26 +29,21 @@ from armen_ml import (
     recommend_from_query
 )
 
-# ---- GEMINI CONVERSATIONAL ARMEN ----
+# ---- ARMEN GEMINI ----
 from armen_gemini import armen_gemini_response
 
 
-# =========================================================
-# Streamlit App Setup
-# =========================================================
+# ---------------------------------------------------------
+# Streamlit setup
+# ---------------------------------------------------------
 load_dotenv()
-st.set_page_config(
-    layout="wide",
-    page_title="Armenia Explorer (Restaurants & Hotels)"
-)
+st.set_page_config(layout="wide", page_title="Armenia Explorer (Restaurants & Hotels)")
 
-# Path to geojson file for province boundaries
 GEOJSON_PATH = os.getenv("ARMENIA_GEOJSON_PATH", "armenia_provinces.geojson")
 
-
-# =========================================================
-# Initialize Session State (must happen before any usage)
-# =========================================================
+# ---------------------------------------------------------
+# Initialize session state keys (must happen before access)
+# ---------------------------------------------------------
 st.session_state.setdefault("restaurant_chat_history", [])
 st.session_state.setdefault("hotel_chat_history", [])
 st.session_state.setdefault("armen_last_query", "")
@@ -84,10 +52,9 @@ st.session_state.setdefault("last_click_raw", "")
 st.session_state.setdefault("trigger_rerun_token", 0)
 
 
-# =========================================================
-# EXPLORE TOGGLE — Restaurants vs Hotels
-# (Large styling + unified alignment + emojis)
-# =========================================================
+# ---------------------------------------------------------
+# UI: Explore toggle (top, bigger, unified alignment)
+# ---------------------------------------------------------
 st.markdown("""
 <style>
 .explore-bar {
@@ -107,12 +74,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown(
-    "<div class='explore-bar'><span class='explore-label'>Explore:</span></div>",
-    unsafe_allow_html=True
-)
+st.markdown("<div class='explore-bar'><span class='explore-label'>Explore:</span></div>", unsafe_allow_html=True)
 
-# Radio toggle with icons
 explore_mode = st.radio(
     label="",
     options=["🍽️ Restaurants", "🏨 Hotels"],
@@ -121,13 +84,16 @@ explore_mode = st.radio(
     key="explore_toggle"
 )
 
-# Normalize for internal logic
-explore_mode = "Restaurants" if explore_mode.startswith("🍽️") else "Hotels"
+# Normalize
+if explore_mode.startswith("🍽️"):
+    explore_mode = "Restaurants"
+else:
+    explore_mode = "Hotels"
 
 
-# =========================================================
-# Mode-Specific Chat History
-# =========================================================
+# ---------------------------------------------------------
+# chat history based on mode
+# ---------------------------------------------------------
 active_history = (
     st.session_state["restaurant_chat_history"]
     if explore_mode == "Restaurants"
@@ -135,26 +101,16 @@ active_history = (
 )
 
 
-# =========================================================
-# Cached Loaders
-# =========================================================
+# ---------------------------------------------------------
+# Cached loaders
+# ---------------------------------------------------------
 @st.cache_data
 def load_geojson(path):
-    """Load province boundary file for folium map."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
 @st.cache_data
 def load_data(mode="Restaurants"):
-    """
-    Load and process dataset for current mode:
-        Restaurants → SQL: location_type='Restaurant'
-        Hotels      → SQL: location_type='Hotel'
-    Applies:
-        - SVM sentiment scoring
-        - Province-level aggregation
-    """
     db_mode = "Restaurant" if mode == "Restaurants" else "Hotel"
     df = fetch_reviews(db_mode)
     df = sentiment_model.apply_sentiment(df, "Review Text")
@@ -162,54 +118,49 @@ def load_data(mode="Restaurants"):
     return df, stats
 
 
-# =========================================================
-# LOAD DATA FOR CURRENT EXPLORE MODE
-# =========================================================
+# ---------------------------------------------------------
+# Load Data
+# ---------------------------------------------------------
 df, province_stats = load_data(mode=explore_mode)
 
-# Ensure Review Text exists
+# Defensive: ensure expected columns exist
 if "Review Text" not in df.columns:
     df["Review Text"] = ""
 
-# Clean text creation (spaCy cleaner or fallback)
+# Ensure clean_text exists
 try:
     df["clean_text"] = df["Review Text"].apply(sentiment_model.clean_text)
-except Exception:
+except:
     import re
     df["clean_text"] = df["Review Text"].apply(
         lambda t: " ".join(re.sub(r"[^a-zA-Z\s]", "", str(t).lower()).split())
     )
 
 
-# =========================================================
-# Build ML Backend for This Mode
-# =========================================================
+# ---------------------------------------------------------
+# Build ML backend for current mode
+# ---------------------------------------------------------
 kind = explore_mode[:-1] if explore_mode.endswith("s") else explore_mode
 
-# Embeddings for all locations
 embeddings = build_embeddings(df, kind=kind)
-
-# Location-level sentiment + rating
 sentiment = compute_sentiment(df)
 rating = compute_rating(df)
 
-# Hotels → calculate weighted quality score
 hotel_quality = compute_hotel_quality(df) if explore_mode == "Hotels" else None
 
-# Extract city & province lists
 cities_list = df["Town/City"].dropna().unique().tolist() if "Town/City" in df.columns else []
 provinces_list = df["Province"].dropna().unique().tolist() if "Province" in df.columns else []
 
 
-# =========================================================
-# Load Province GeoJSON for Map Rendering
-# =========================================================
+# ---------------------------------------------------------
+# Load GeoJSON
+# ---------------------------------------------------------
 geojson = load_geojson(GEOJSON_PATH)
 
+# ---------------------------------------------------------
+# Merge province-level stats
+# ---------------------------------------------------------
 
-# =========================================================
-# Merge Province Stats into GeoJSON (Map Coloring)
-# =========================================================
 
 # Convert sentiment (0–1) to RGB between red → orange → green
 def sentiment_to_color(score):
@@ -234,12 +185,9 @@ def sentiment_to_color(score):
 
     return (r, g, b)
 
-
 # ---------------------------------------------------------
-# Merge province-level stats with sentiment colors
+# Merge province-level stats with correct sentiment colors
 # ---------------------------------------------------------
-
-
 for feat in geojson["features"]:
     props = feat["properties"]
     province = props.get("shapeName", "").strip()
@@ -269,12 +217,13 @@ for feat in geojson["features"]:
             "sentiment_color": (200, 200, 200)
         })
 
-# =========================================================
-# CSS Styling: Summary Cards + WhatsApp Chat Bubbles
-# =========================================================
+
+
+# ---------------------------------------------------------
+# CSS for Cards + Chat Bubbles (WhatsApp-like)
+# ---------------------------------------------------------
 st.markdown("""
 <style>
-/* Summary Metric Cards */
 
 .card {
     background: linear-gradient(135deg, #1c1c1c, #0e0e0e);
@@ -301,7 +250,8 @@ st.markdown("""
     text-align: center;
 }
 
-/* WhatsApp-Style CHAT BUBBLES */
+/* WHATSAPP-STYLE CHAT BUBBLES */
+
 .user-bubble {
     background: #075E54;
     color: white;
@@ -324,8 +274,8 @@ st.markdown("""
     font-size: 15px;
     max-width: 80%;
     word-wrap: break-word;
-    margin-left: auto;
-    text-align: left;
+    margin-left:auto;
+    text-align:left;
 }
 
 .reset-button-container {
@@ -334,7 +284,7 @@ st.markdown("""
     margin-top:-10px;
     margin-bottom:10px;
 }
-            
+
 .armen-table {
     width: 100%;
     border-collapse: collapse;
@@ -358,23 +308,20 @@ st.markdown("""
     background-color: #222;
 }
 
+
 </style>
 """, unsafe_allow_html=True)
 
 
-
-# =========================================================
+# ---------------------------------------------------------
 # Layout
-# =========================================================
-
+# ---------------------------------------------------------
 st.title(f"Armenia — {explore_mode} Sentiment Map Explorer")
 st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # SUMMARY CARDS
 # ---------------------------------------------------------
-
-
 card_col1, card_col2, card_col3, card_col4 = st.columns([1,1,1,1])
 
 total_items = int(province_stats.get("restaurant_count", pd.Series([0])).sum())
@@ -408,9 +355,9 @@ with card_col4:
 st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
 
-# =========================================================
-# MAP UI — Folium Map Rendering
-# =========================================================
+# ---------------------------------------------------------
+# MAP UI
+# ---------------------------------------------------------
 st.subheader("Click a province on the map")
 
 m = folium.Map(
@@ -484,26 +431,21 @@ map_data = st_folium(
     key=f"map_{st.session_state['trigger_rerun_token']}"
 )
 
-
-# =========================================================
-# CLICK DETECTION — Detect province selected by user
-# =========================================================
+# ---------------------------------------------------------
+# CLICK DETECTION
+# ---------------------------------------------------------
 raw_json = json.dumps(map_data, sort_keys=True)
 
 if raw_json != st.session_state["last_click_raw"]:
     st.session_state["last_click_raw"] = raw_json
 
     clicked = None
-
-    # 1. If active drawing clicked
     if map_data.get("last_active_drawing"):
         clicked = map_data["last_active_drawing"]["properties"].get("shapeName")
 
-    # 2. If popup clicked
     if not clicked and map_data.get("last_object_clicked_popup"):
         clicked = map_data["last_object_clicked_popup"].replace("Select", "").strip()
 
-    # 3. If tooltip clicked
     if not clicked and map_data.get("last_object_clicked_tooltip"):
         lines = [
             l.strip() for l in map_data["last_object_clicked_tooltip"].splitlines()
@@ -512,30 +454,27 @@ if raw_json != st.session_state["last_click_raw"]:
         if len(lines) >= 2:
             clicked = lines[1]
 
-    # Handle normalized province lookup
     if clicked:
         lookup = (
             {p.lower(): p for p in province_stats["Province"].unique()}
             if "Province" in province_stats.columns else {}
         )
         canonical = lookup.get(clicked.lower(), clicked)
-
-        # Update selected province
         st.session_state["selected_province"] = canonical
         st.session_state["trigger_rerun_token"] += 1
         st.rerun()
 
 
-# =========================================================
-# TOP 5 PANEL — Restaurants or Hotels
-# =========================================================
+
+# ---------------------------------------------------------
+# TOP 5 (Restaurants or Hotels)
+# ---------------------------------------------------------
 st.header(f"Top 5 {explore_mode} (Ranked by Rating & Reviews)")
 
 prov = st.session_state.get("selected_province")
 
 if prov:
     st.subheader(f"Province: {prov}")
-
     if "Province" not in df.columns:
         st.warning(f"No {explore_mode.lower()} found in this province.")
     else:
@@ -544,11 +483,9 @@ if prov:
         if sel.empty:
             st.warning(f"No {explore_mode.lower()} found in this province.")
         else:
-            # Clean numeric fields
             sel["Review Rating"] = pd.to_numeric(sel["Review Rating"], errors="coerce")
             sel["sentiment_score"] = pd.to_numeric(sel["sentiment_score"], errors="coerce")
 
-            # Top-5 ranking
             top5 = (
                 sel.groupby("Location Name")
                 .agg(
@@ -563,13 +500,14 @@ if prov:
 
             top5.index = range(1, len(top5) + 1)
 
-            # Rename columns
+            # ⭐ Rename columns
             top5 = top5.rename(columns={
                 "Location Name": "Location",
                 "avg_rating": "Average Rating",
                 "reviews_count": "Review Count",
                 "avg_sentiment": "Average Sentiment"
             })
+
 
             # ---------- Build HTML table for aligned columns ----------
             import textwrap
@@ -817,3 +755,4 @@ with chat_container:
 
                 active_history.append(("armen", armen_reply))
                 st.rerun()
+

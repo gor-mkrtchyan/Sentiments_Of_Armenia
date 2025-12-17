@@ -463,17 +463,8 @@ def recommend_from_query(
         if row.empty:
             continue
 
-        rest_city = (
-            str(row["Town/City"]).strip()
-            if "Town/City" in row and pd.notna(row["Town/City"])
-            else ""
-        )
-
-        rest_province = (
-            str(row["Province"]).strip()
-            if "Province" in row and pd.notna(row["Province"])
-            else ""
-        )
+        rest_city = str(row.get("Town/City", [""])[0])
+        rest_province = str(row.get("Province", [""])[0])
 
         # City → highest priority
         if user_city:
