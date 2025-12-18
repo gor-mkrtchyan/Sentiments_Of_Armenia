@@ -52,6 +52,32 @@ from armen_gemini import armen_gemini_response
 
 
 # ---------------------------------------------------------
+# Armenian geographic references (for robust NLP matching)
+# ---------------------------------------------------------
+
+# Full list of Armenia's 11 provinces (Marzer)
+ARMENIA_PROVINCES = [
+    "Yerevan", "Aragatsotn", "Ararat", "Armavir",
+    "Gegharkunik", "Kotayk", "Lori", "Shirak",
+    "Syunik", "Tavush", "Vayots Dzor"
+]
+
+# List of all major cities & towns in Armenia
+ARMENIA_CITIES = [
+    "Yerevan", "Gyumri", "Vanadzor", "Vagharshapat", "Hrazdan", "Abovyan",
+    "Kapan", "Ijevan", "Gavar", "Artashat", "Sevan", "Armavir",
+    "Goris", "Dilijan", "Alaverdi", "Ashtarak", "Sisian", "Charentsavan",
+    "Stepanavan", "Vardenis", "Martuni", "Spitak", "Yeghegnadzor",
+    "Vayk", "Jermuk", "Gavar", "Meghri",
+    "Tsakhkadzor", "Byurakan", "Odzun", "Teghut", "Haghpat",
+    "Halidzor", "Tatev", "Lernarat", "Norashen", "Dzoraget",
+    "Garni", "Antarut", "Areni", "Ararat", "Arinj", "Aparan",
+    "Gyulagarak", "Akunk", "Dsegh", "Tsaghkunk", "Tsovagyugh"
+]
+
+
+
+# ---------------------------------------------------------
 # Streamlit Initialization & Global Config
 # ---------------------------------------------------------
 load_dotenv()
@@ -671,11 +697,25 @@ with chat_container:
                 unsafe_allow_html=True
             )
 
+    # -----------------------------------------------------------
+    # User Input Hint + Field
+    # -----------------------------------------------------------
+
+    # Hint for proper geographic input formatting
+    st.markdown(
+        "<p style='color:#cccccc; font-size:14px;'>"
+        "💡 <em>Please write city or province names starting with an uppercase letter "
+        "(e.g., Gyumri, Yerevan, Syunik).</em>"
+        "</p>",
+        unsafe_allow_html=True
+    )
+
     # User input field
     user_query = st.text_input(
         f"Tell Armen what you’re looking for in {explore_mode}:",
         key="armen_input"
     )
+
 
     # On submit
     if st.button("Ask Armen", key="ask_armen"):
@@ -690,36 +730,65 @@ with chat_container:
             # -------------------------------------------------
             def build_ml_response(query, top_n=5):
 
-                # Extract city/province from query BEFORE we run recommend_from_query
-                # Try match against known DB cities first
+                # ---------------------------------------------------------------
+                # Robust Entity Extraction for City and Province (Final Version)
+                # ---------------------------------------------------------------
+                # This block ensures that geographic intent in user queries
+                # is correctly interpreted by cross-checking capitalized words
+                # against authoritative province and city lists. This prevents 
+                # provincial names (e.g., "Shirak") from being misclassified as
+                # cities and ensures that unsupported locations fail gracefully.
+
+                # First attempt: extract city using known DB cities
                 city_hit = extract_city_from_query(query, cities_list)
 
-                # If not found, fallback: extract ANY capitalized word from user query as possible city
-                if not city_hit:
-                    words = [w.strip(',.!?') for w in query.split()]
-                    # Heuristic: Armenian cities are typically capitalized proper nouns
-                    candidates = [w for w in words if w[0].isupper()]
-                    # Pick the first word that is not a common pronoun/article
-                    EXCLUDE = {"I", "You", "We", "They", "The", "A", "In", "At", "Of", "And", "Suggest", "Give", "Provide", "Tell", "Provide"}
-                    candidates = [c for c in candidates if c not in EXCLUDE]
-
-                    if candidates:
-                        city_hit = candidates[0]   # First possible city mentioned
-
+                # Extract province explicitly using known DB provinces
                 prov_hit = extract_province_from_query(query, provinces_list)
 
-                # If the user asked for a city that exists in our city list,
-                # but our database has NO restaurants in that city → return graceful message.
+                # ---------------------------------------------------------------
+                # FALLBACK LOGIC — handle capitalized words that may represent cities
+                # ---------------------------------------------------------------
+                if not city_hit and not prov_hit:
+                    words = [w.strip(',.!?') for w in query.split() if w]
+
+                    # Filter to capitalized words only
+                    capitalized = [w for w in words if w and w[0].isupper()]
+
+                    # Remove generic verbs and pronouns
+                    EXCLUDE = {
+                        "I", "You", "We", "They", "The", "A", "In", "At", "Of", "And", "What", "Where", "Best", "When", "Why", "Share", "Output"
+                        "Suggest", "Give", "Provide", "Tell", "Show", "Find", "Recommend", "Can", "Is", "Are", "Will", "Would"
+                    }
+                    capitalized = [w for w in capitalized if w not in EXCLUDE]
+
+                    # Iterate over capitalized words and classify as city or province
+                    for word in capitalized:
+                        if word in ARMENIA_PROVINCES:
+                            prov_hit = word
+                            break
+                        if word in ARMENIA_CITIES:
+                            city_hit = word
+                            break
+
+                    # If capitalized word exists but is *not* a valid city or province:
+                    # treat it as a city query for a location we have no data on.
+                    if not city_hit and not prov_hit and capitalized:
+                        unknown_city = capitalized[0]
+                        return f"Sorry, jan, we don't have any {explore_mode.lower()} in **{unknown_city}** yet."
+
+                # ---------------------------------------------------------------
+                # Validate that the detected city or province exists in the DB
+                # ---------------------------------------------------------------
                 if city_hit:
                     db_city_subset = df[df["Town/City"].str.lower() == city_hit.lower()]
                     if db_city_subset.empty:
                         return f"Sorry, jan, we don't have any {explore_mode.lower()} in **{city_hit}** yet."
 
-                # Province-level same logic
                 if prov_hit:
                     db_prov_subset = df[df["Province"].str.lower() == prov_hit.lower()]
                     if db_prov_subset.empty:
                         return f"Sorry, jan, we don't have any {explore_mode.lower()} in the **{prov_hit}** province yet."
+
 
                 # Compute recommended locations normally
                 recs = recommend_from_query(
